@@ -10,7 +10,7 @@ import tomllib
 
 import parse
 
-DISCORD_SLURP_VERSION = "0.1.0"
+DISCORD_SLURP_VERSION = "0.2.0"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("config_file")
@@ -40,18 +40,18 @@ async def on_message(message):
     current_unix_second = int(time.time())
     data = await parse.parse_message(message, max_reaction_users)
 
-    async with aiosqlite.connect(db_path) as db:
-        await db.execute(
+    async with aiosqlite.connect(db_path) as con:
+        await con.execute(
             "INSERT INTO records (type_id, data, fetched_at_unix_second, record_version_id) "
             "VALUES (?, ?, ?, ?);",
             (
                 record_types["message"],
-                json.dumps(data, separators=(",", ":")),
+                json.dumps(data, allow_nan=False, separators=(",", ":")),
                 current_unix_second,
                 record_version_id,
             ),
         )
-        await db.commit()
+        await con.commit()
 
 
 def init():
@@ -59,26 +59,27 @@ def init():
 
     con = sqlite3.connect(db_path)
     cur = con.cursor()
+
     with open("setup.sql", "r") as setup_script_file:
         cur.executescript(setup_script_file.read())
 
-        global record_types, record_version_id
-        record_types = {
-            type_name: type_id
-            for type_id, type_name in cur.execute(
-                "SELECT * FROM record_types;"
-            ).fetchall()
-        }
+    global record_types, record_version_id
+    record_types = {
+        type_name: type_id
+        for type_id, type_name in cur.execute("SELECT * FROM record_types;").fetchall()
+    }
 
-        record_version = f"discord_slurp {DISCORD_SLURP_VERSION}\ndiscord.py {discord.__version__}"
-        cur.execute(
-            "INSERT OR IGNORE INTO record_versions (version) VALUES (?);",
-            (
-                record_version,
-            ),
-        )
-        record_version_id = cur.execute("SELECT id FROM record_versions WHERE version = ?;", (record_version,)).fetchone()[0]
-        con.commit()
+    record_version = (
+        f"discord_slurp {DISCORD_SLURP_VERSION}\ndiscord.py {discord.__version__}"
+    )
+    cur.execute(
+        "INSERT OR IGNORE INTO record_versions (version) VALUES (?);",
+        (record_version,),
+    )
+    record_version_id = cur.execute(
+        "SELECT id FROM record_versions WHERE version = ?;", (record_version,)
+    ).fetchone()[0]
+    con.commit()
 
     client.run(token)
 
