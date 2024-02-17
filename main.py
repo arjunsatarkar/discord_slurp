@@ -70,13 +70,14 @@ def init():
             ).fetchall()
         }
 
+        record_version = f"discord_slurp {DISCORD_SLURP_VERSION}\ndiscord.py {discord.__version__}"
         cur.execute(
             "INSERT OR IGNORE INTO record_versions (version) VALUES (?);",
             (
-                f"discord_slurp {DISCORD_SLURP_VERSION}\ndiscord.py {discord.__version__}",
+                record_version,
             ),
         )
-        record_version_id = cur.lastrowid
+        record_version_id = cur.execute("SELECT id FROM record_versions WHERE version = ?;", (record_version,)).fetchone()[0]
         con.commit()
 
     client.run(token)
